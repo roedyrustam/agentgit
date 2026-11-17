@@ -148,3 +148,70 @@ fn test_mcp_tool_dispatch_and_identifier_guard() {
     let log_res = mcp::handle_tool_call("agentgit_causal_log", &json!({}), &root);
     assert!(log_res.get("isError").is_none());
 }
+
+#[test]
+fn test_eight_parallel_agents_stress_and_purge() {
+    let repo = setup_git_repo();
+    let root = repo.path().to_path_buf();
+
+    let (engine, _) = AgentGitEngine::init(&root).expect("init");
+    let mut handles = Vec::new();
+
+    for i in 0..8 {
+        let repo_root = root.clone();
+        handles.push(std::thread::spawn(move || {
+            let mut eng = AgentGitEngine::open(&repo_root).expect("open");
+            let agent_id = format!("swarm-{i}");
+            let agent = eng
+                .spawn(&agent_id, "worker", Some("gemini-4"))
+                .expect("spawn");
+            let wt = eng.repo_root.join(&agent.worktree_path);
+
+            for step in 1..=2 {
+                std::fs::write(wt.join(format!("file_{i}.txt")), format!("v{step}\n")).unwrap();
+                eng.checkpoint(
+                    &agent_id,
+                    "write_file",
+                    &format!("Agent {i} step {step}"),
+                    "parallel task",
+                    0.005,
+                )
+                .expect("checkpoint");
+            }
+        }));
+    }
+
+    for h in handles {
+        h.join().expect("thread join");
+    }
+
+    // Verify all 16 causal nodes exist and human HEAD is untouched
+    let nodes = engine.log(None, None, 50).expect("log");
+    assert_eq!(nodes.len(), 16);
+    assert!(!root.join("file_0.txt").exists());
+    assert!(!root.join("file_7.txt").exists());
+
+    // Diff a node and test multi-step rollback on swarm-0
+    let diff = engine.diff_node(&nodes[0].id, None).expect("diff_node");
+    assert!(!diff.is_empty());
+
+    let mut eng_mut = AgentGitEngine::open(&root).expect("open mut");
+    let rb = eng_mut
+        .rollback_agent_steps("swarm-0", 1)
+        .expect("rollback_agent_steps");
+    assert_eq!(rb.rolled_back_node_ids.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(
+            eng_mut
+                .repo_root
+                .join(".agentgit/worktrees/swarm-0/file_0.txt")
+        )
+        .unwrap(),
+        "v1\n"
+    );
+
+    // Purge all .agentgit state (Legal & Privacy /delete-account backend)
+    drop(engine);
+    eng_mut.purge_all().expect("purge_all");
+    assert!(!root.join(".agentgit").exists());
+}

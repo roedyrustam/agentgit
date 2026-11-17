@@ -1,5 +1,5 @@
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
@@ -93,12 +93,12 @@ pub fn run_stdio_server(default_repo: PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-pub fn handle_tool_call(name: &str, args: &Value, default_repo: &PathBuf) -> Value {
+pub fn handle_tool_call(name: &str, args: &Value, default_repo: &Path) -> Value {
     let repo_path = args
         .get("repo_path")
         .and_then(Value::as_str)
         .map(PathBuf::from)
-        .unwrap_or_else(|| default_repo.clone());
+        .unwrap_or_else(|| default_repo.to_path_buf());
 
     let res: Result<Value, String> = (|| {
         match name {
