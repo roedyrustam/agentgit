@@ -1,0 +1,13 @@
+{
+  "name": "agentgit",
+  "version": "0.1.0",
+  "description": "Local-first Causal Time-Travel & Shadow Worktree Engine for Multi-Agent AI",
+  "author": "Roedy Rustam",
+  "license": "MIT",
+  "mcpServers": {
+    "agentgit": {
+      "command": "agentgit",
+      "args": ["mcp"]
+    }
+  }
+}
