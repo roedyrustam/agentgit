@@ -41,11 +41,7 @@ impl AgentGitEngine {
         std::fs::create_dir_all(state_dir.join("worktrees"))?;
         let db = StateDb::open(&state_dir.join("state.db"))?;
         let (branch, head_oid) = git_ops::head_branch_and_oid(&repo_root)?;
-        let session = db.ensure_active_session(
-            &repo_root.to_string_lossy(),
-            &branch,
-            &head_oid,
-        )?;
+        let session = db.ensure_active_session(&repo_root.to_string_lossy(), &branch, &head_oid)?;
         Ok((
             Self {
                 repo_root,
@@ -134,12 +130,8 @@ impl AgentGitEngine {
             .map(|n| n.commit_oid.clone())
             .unwrap_or_else(|| session.base_commit_oid.clone());
 
-        let snapshot = git_ops::capture_shadow_snapshot(
-            &abs_worktree,
-            &agent.ref_name,
-            &parent_oid,
-            summary,
-        )?;
+        let snapshot =
+            git_ops::capture_shadow_snapshot(&abs_worktree, &agent.ref_name, &parent_oid, summary)?;
 
         let mut hasher = Sha256::new();
         hasher.update(prompt_text.as_bytes());

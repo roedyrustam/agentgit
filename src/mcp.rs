@@ -40,7 +40,8 @@ pub fn run_stdio_server(default_repo: PathBuf) -> io::Result<()> {
         let params = req.get("params").cloned().unwrap_or_else(|| json!({}));
 
         // Notifications have no `id` and must not receive a response.
-        if id.is_none() || id.as_ref() == Some(&Value::Null) && method.starts_with("notifications/") {
+        if id.is_none() || id.as_ref() == Some(&Value::Null) && method.starts_with("notifications/")
+        {
             continue;
         }
 
@@ -71,7 +72,10 @@ pub fn run_stdio_server(default_repo: PathBuf) -> io::Result<()> {
             }),
             "tools/call" => {
                 let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                let args = params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
                 let call_result = handle_tool_call(tool_name, &args, &default_repo);
                 json!({
                     "jsonrpc": "2.0",
@@ -100,95 +104,115 @@ pub fn handle_tool_call(name: &str, args: &Value, default_repo: &Path) -> Value 
         .map(PathBuf::from)
         .unwrap_or_else(|| default_repo.to_path_buf());
 
-    let res: Result<Value, String> = (|| {
-        match name {
-            "agentgit_spawn_shadow" => {
-                let agent_id = req_str(args, "agent_id")?;
-                let role = args.get("role").and_then(Value::as_str).unwrap_or("worker");
-                let model = args.get("model_name").and_then(Value::as_str);
-                let engine = match AgentGitEngine::open(&repo_path) {
-                    Ok(e) => e,
-                    Err(_) => AgentGitEngine::init(&repo_path).map_err(|e| e.to_string())?.0,
-                };
-                let agent = engine.spawn(agent_id, role, model).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_value(agent).map_err(|e| e.to_string())?)
-            }
-            "agentgit_checkpoint" => {
-                let agent_id = req_str(args, "agent_id")?;
-                let tool_name = args.get("tool_name").and_then(Value::as_str).unwrap_or("edit_file");
-                let summary = req_str(args, "summary")?;
-                let prompt_text = args.get("prompt_text").and_then(Value::as_str).unwrap_or("");
-                let cost = args.get("token_cost_usd").and_then(Value::as_f64).unwrap_or(0.0);
-                let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
-                let node = engine
-                    .checkpoint(agent_id, tool_name, summary, prompt_text, cost)
-                    .map_err(|e| e.to_string())?;
-                Ok(serde_json::to_value(node).map_err(|e| e.to_string())?)
-            }
-            "agentgit_causal_log" => {
-                let agent_id = args.get("agent_id").and_then(Value::as_str);
-                let search = args.get("search").and_then(Value::as_str);
-                let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(30) as usize;
-                let engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
-                let nodes = engine.log(agent_id, search, limit).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_value(nodes).map_err(|e| e.to_string())?)
-            }
-            "agentgit_diff_node" => {
-                let node_id = req_str(args, "node_id")?;
-                let vs_node_id = args.get("vs_node_id").and_then(Value::as_str);
-                let engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
-                let diff = engine.diff_node(node_id, vs_node_id).map_err(|e| e.to_string())?;
-                Ok(json!({ "node_id": node_id, "diff": diff }))
-            }
-            "agentgit_rollback_causal" => {
-                let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
-                if let Some(node_id) = args.get("node_id").and_then(Value::as_str) {
-                    let rb = engine.rollback_node(node_id).map_err(|e| e.to_string())?;
-                    Ok(serde_json::to_value(rb).map_err(|e| e.to_string())?)
-                } else {
-                    let agent_id = req_str(args, "agent_id")?;
-                    let steps = args.get("steps").and_then(Value::as_u64).unwrap_or(1) as usize;
-                    let rb = engine
-                        .rollback_agent_steps(agent_id, steps)
-                        .map_err(|e| e.to_string())?;
-                    Ok(serde_json::to_value(rb).map_err(|e| e.to_string())?)
+    let res: Result<Value, String> = (|| match name {
+        "agentgit_spawn_shadow" => {
+            let agent_id = req_str(args, "agent_id")?;
+            let role = args.get("role").and_then(Value::as_str).unwrap_or("worker");
+            let model = args.get("model_name").and_then(Value::as_str);
+            let engine = match AgentGitEngine::open(&repo_path) {
+                Ok(e) => e,
+                Err(_) => {
+                    AgentGitEngine::init(&repo_path)
+                        .map_err(|e| e.to_string())?
+                        .0
                 }
-            }
-            "agentgit_verify_and_promote" => {
-                let agent_id = req_str(args, "agent_id")?;
-                let verify_cmd = args.get("verify_cmd").and_then(Value::as_str);
-                let promote = args.get("promote").and_then(Value::as_bool).unwrap_or(false);
-                let squash = args.get("squash").and_then(Value::as_bool).unwrap_or(true);
-                let commit_msg = args.get("commit_msg").and_then(Value::as_str);
-                let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
-
-                let gate = if let Some(cmd) = verify_cmd {
-                    let g = engine.verify(agent_id, cmd).map_err(|e| e.to_string())?;
-                    if g.exit_code != 0 {
-                        return Err(format!(
-                            "Verification gate failed (exit {}):\n{}",
-                            g.exit_code, g.output_excerpt
-                        ));
-                    }
-                    Some(g)
-                } else {
-                    None
-                };
-
-                let promoted = if promote {
-                    Some(
-                        engine
-                            .promote(agent_id, squash, commit_msg)
-                            .map_err(|e| e.to_string())?,
-                    )
-                } else {
-                    None
-                };
-
-                Ok(json!({ "gate": gate, "promoted": promoted }))
-            }
-            _ => Err(format!("Unknown tool: {name}")),
+            };
+            let agent = engine
+                .spawn(agent_id, role, model)
+                .map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(agent).map_err(|e| e.to_string())?)
         }
+        "agentgit_checkpoint" => {
+            let agent_id = req_str(args, "agent_id")?;
+            let tool_name = args
+                .get("tool_name")
+                .and_then(Value::as_str)
+                .unwrap_or("edit_file");
+            let summary = req_str(args, "summary")?;
+            let prompt_text = args
+                .get("prompt_text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let cost = args
+                .get("token_cost_usd")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
+            let node = engine
+                .checkpoint(agent_id, tool_name, summary, prompt_text, cost)
+                .map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(node).map_err(|e| e.to_string())?)
+        }
+        "agentgit_causal_log" => {
+            let agent_id = args.get("agent_id").and_then(Value::as_str);
+            let search = args.get("search").and_then(Value::as_str);
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(30) as usize;
+            let engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
+            let nodes = engine
+                .log(agent_id, search, limit)
+                .map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(nodes).map_err(|e| e.to_string())?)
+        }
+        "agentgit_diff_node" => {
+            let node_id = req_str(args, "node_id")?;
+            let vs_node_id = args.get("vs_node_id").and_then(Value::as_str);
+            let engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
+            let diff = engine
+                .diff_node(node_id, vs_node_id)
+                .map_err(|e| e.to_string())?;
+            Ok(json!({ "node_id": node_id, "diff": diff }))
+        }
+        "agentgit_rollback_causal" => {
+            let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
+            if let Some(node_id) = args.get("node_id").and_then(Value::as_str) {
+                let rb = engine.rollback_node(node_id).map_err(|e| e.to_string())?;
+                Ok(serde_json::to_value(rb).map_err(|e| e.to_string())?)
+            } else {
+                let agent_id = req_str(args, "agent_id")?;
+                let steps = args.get("steps").and_then(Value::as_u64).unwrap_or(1) as usize;
+                let rb = engine
+                    .rollback_agent_steps(agent_id, steps)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::to_value(rb).map_err(|e| e.to_string())?)
+            }
+        }
+        "agentgit_verify_and_promote" => {
+            let agent_id = req_str(args, "agent_id")?;
+            let verify_cmd = args.get("verify_cmd").and_then(Value::as_str);
+            let promote = args
+                .get("promote")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let squash = args.get("squash").and_then(Value::as_bool).unwrap_or(true);
+            let commit_msg = args.get("commit_msg").and_then(Value::as_str);
+            let mut engine = AgentGitEngine::open(&repo_path).map_err(|e| e.to_string())?;
+
+            let gate = if let Some(cmd) = verify_cmd {
+                let g = engine.verify(agent_id, cmd).map_err(|e| e.to_string())?;
+                if g.exit_code != 0 {
+                    return Err(format!(
+                        "Verification gate failed (exit {}):\n{}",
+                        g.exit_code, g.output_excerpt
+                    ));
+                }
+                Some(g)
+            } else {
+                None
+            };
+
+            let promoted = if promote {
+                Some(
+                    engine
+                        .promote(agent_id, squash, commit_msg)
+                        .map_err(|e| e.to_string())?,
+                )
+            } else {
+                None
+            };
+
+            Ok(json!({ "gate": gate, "promoted": promoted }))
+        }
+        _ => Err(format!("Unknown tool: {name}")),
     })();
 
     match res {

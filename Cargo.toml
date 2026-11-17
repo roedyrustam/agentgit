@@ -2,9 +2,13 @@
 name = "agentgit"
 version = "0.1.0"
 edition = "2021"
+authors = ["Roedy Rustam"]
 description = "Local-first Causal Time-Travel & Shadow Worktree Engine (CLI + MCP v1.x + Sidecar UI) for Multi-Agent AI"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/roedyrustam/agentgit"
+homepage = "https://github.com/roedyrustam/agentgit"
+documentation = "https://github.com/roedyrustam/agentgit#readme"
 keywords = ["git", "mcp", "ai", "agents", "worktree"]
 categories = ["command-line-utilities", "development-tools"]
 

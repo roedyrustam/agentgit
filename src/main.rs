@@ -187,7 +187,11 @@ fn main() -> Result<()> {
                 println!("No causal nodes recorded.");
             } else {
                 for n in nodes {
-                    let rb = if n.is_rolled_back { " [ROLLED_BACK]" } else { "" };
+                    let rb = if n.is_rolled_back {
+                        " [ROLLED_BACK]"
+                    } else {
+                        ""
+                    };
                     println!(
                         "{} | {:<12} | {:<7} | {} | {}{}",
                         &n.id[..8],

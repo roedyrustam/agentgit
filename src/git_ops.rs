@@ -40,9 +40,8 @@ fn run_git(cwd: &Path, args: &[&str], extra_env: &[(&str, &str)]) -> Result<Stri
 
 /// Resolves the canonical Git repository root from any directory inside the repo.
 pub fn resolve_repo_root(start: &Path) -> Result<PathBuf> {
-    let out = run_git(start, &["rev-parse", "--show-toplevel"], &[]).map_err(|_| {
-        AgentGitError::NotAGitRepo(start.display().to_string())
-    })?;
+    let out = run_git(start, &["rev-parse", "--show-toplevel"], &[])
+        .map_err(|_| AgentGitError::NotAGitRepo(start.display().to_string()))?;
     let canonical = std::fs::canonicalize(PathBuf::from(out))?;
     // Strip Windows verbatim prefix (\\?\) because `git worktree add` rejects //?/ paths.
     #[cfg(windows)]
@@ -143,12 +142,26 @@ fn collect_file_touches(
 ) -> Result<Vec<FileTouchInput>> {
     let numstat = run_git(
         cwd,
-        &["diff-tree", "--no-commit-id", "--numstat", "-r", parent_oid, commit_oid],
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "--numstat",
+            "-r",
+            parent_oid,
+            commit_oid,
+        ],
         &[],
     )?;
     let status_out = run_git(
         cwd,
-        &["diff-tree", "--no-commit-id", "--name-status", "-r", parent_oid, commit_oid],
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "--name-status",
+            "-r",
+            parent_oid,
+            commit_oid,
+        ],
         &[],
     )?;
 
@@ -219,7 +232,13 @@ pub fn promote_to_human_head(
     let merge_base_arg = format!("--merge-base={base_oid}");
     let preflight = Command::new("git")
         .current_dir(repo_root)
-        .args(["merge-tree", "--write-tree", &merge_base_arg, "HEAD", source_oid])
+        .args([
+            "merge-tree",
+            "--write-tree",
+            &merge_base_arg,
+            "HEAD",
+            source_oid,
+        ])
         .output()?;
 
     if !preflight.status.success() {
@@ -232,7 +251,11 @@ pub fn promote_to_human_head(
         run_git(repo_root, &["merge", "--squash", source_oid], &[])?;
         run_git(repo_root, &["commit", "-m", commit_msg], &[])?;
     } else {
-        run_git(repo_root, &["merge", "--no-ff", "-m", commit_msg, source_oid], &[])?;
+        run_git(
+            repo_root,
+            &["merge", "--no-ff", "-m", commit_msg, source_oid],
+            &[],
+        )?;
     }
 
     run_git(repo_root, &["rev-parse", "HEAD"], &[])

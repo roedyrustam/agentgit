@@ -46,8 +46,12 @@ fn test_parallel_agents_causal_rollback_and_promote() {
 
     let (mut engine, _session) = AgentGitEngine::init(root).expect("init");
 
-    let agent_a = engine.spawn("frontend-1", "UI", Some("gemini-4")).expect("spawn A");
-    let agent_b = engine.spawn("backend-1", "API", Some("gemini-4")).expect("spawn B");
+    let agent_a = engine
+        .spawn("frontend-1", "UI", Some("gemini-4"))
+        .expect("spawn A");
+    let agent_b = engine
+        .spawn("backend-1", "API", Some("gemini-4"))
+        .expect("spawn B");
 
     let wt_a = engine.repo_root.join(&agent_a.worktree_path);
     let wt_b = engine.repo_root.join(&agent_b.worktree_path);
@@ -70,14 +74,19 @@ fn test_parallel_agents_causal_rollback_and_promote() {
         .expect("cp B1");
 
     // Verify Agent B with a real command
-    let gate = engine.verify("backend-1", "git status --short").expect("verify B");
+    let gate = engine
+        .verify("backend-1", "git status --short")
+        .expect("verify B");
     assert_eq!(gate.exit_code, 0);
 
     // Rollback Agent A step 2 -> should restore v1, leaving Agent B untouched
     let rb = engine.rollback_node(&n_a2.id).expect("rollback A2");
     assert_eq!(rb.rolled_back_node_ids, vec![n_a2.id.clone()]);
     assert_eq!(rb.restored_commit_oid, n_a1.commit_oid);
-    assert_eq!(std::fs::read_to_string(wt_a.join("ui.txt")).unwrap(), "v1\n");
+    assert_eq!(
+        std::fs::read_to_string(wt_a.join("ui.txt")).unwrap(),
+        "v1\n"
+    );
     assert_eq!(
         std::fs::read_to_string(wt_b.join("api.txt")).unwrap(),
         "endpoint ok\n"
@@ -115,19 +124,36 @@ fn test_promote_conflict_preflight_protects_human_head() {
     let a = engine.spawn("agent-a", "worker", None).unwrap();
     let b = engine.spawn("agent-b", "worker", None).unwrap();
 
-    std::fs::write(engine.repo_root.join(&a.worktree_path).join("shared.txt"), "from-a\n").unwrap();
-    engine.checkpoint("agent-a", "edit_file", "Edit shared A", "p", 0.0).unwrap();
+    std::fs::write(
+        engine.repo_root.join(&a.worktree_path).join("shared.txt"),
+        "from-a\n",
+    )
+    .unwrap();
+    engine
+        .checkpoint("agent-a", "edit_file", "Edit shared A", "p", 0.0)
+        .unwrap();
 
-    std::fs::write(engine.repo_root.join(&b.worktree_path).join("shared.txt"), "from-b\n").unwrap();
-    engine.checkpoint("agent-b", "edit_file", "Edit shared B", "p", 0.0).unwrap();
+    std::fs::write(
+        engine.repo_root.join(&b.worktree_path).join("shared.txt"),
+        "from-b\n",
+    )
+    .unwrap();
+    engine
+        .checkpoint("agent-b", "edit_file", "Edit shared B", "p", 0.0)
+        .unwrap();
 
     // Agent A promotes cleanly
     engine.promote("agent-a", true, Some("feat: A")).unwrap();
 
     // Agent B conflicts during pre-flight and does NOT corrupt human HEAD
-    let err = engine.promote("agent-b", true, Some("feat: B")).unwrap_err();
+    let err = engine
+        .promote("agent-b", true, Some("feat: B"))
+        .unwrap_err();
     assert!(matches!(err, AgentGitError::MergeConflict(_)));
-    assert_eq!(std::fs::read_to_string(root.join("shared.txt")).unwrap(), "from-a\n");
+    assert_eq!(
+        std::fs::read_to_string(root.join("shared.txt")).unwrap(),
+        "from-a\n"
+    );
 }
 
 #[test]

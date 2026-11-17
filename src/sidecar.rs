@@ -28,15 +28,16 @@ pub fn run_sidecar_server(repo_path: PathBuf, port: u16) -> anyhow::Result<()> {
             (Method::Get, "/") => html_resp(200, sidecar_html::render_cockpit_html(&session_token)),
             (Method::Get, "/privacy") => html_resp(200, sidecar_html::render_privacy_html()),
             (Method::Get, "/terms") => html_resp(200, sidecar_html::render_terms_html()),
-            (Method::Get, "/delete-account") => {
-                html_resp(200, sidecar_html::render_delete_account_html(&session_token))
+            (Method::Get, "/delete-account") => html_resp(
+                200,
+                sidecar_html::render_delete_account_html(&session_token),
+            ),
+            (Method::Get, "/api/v1/dag") => {
+                match AgentGitEngine::open(&repo_path).and_then(|e| e.dag_snapshot()) {
+                    Ok(dag) => json_resp(200, serde_json::to_value(dag).unwrap_or_default()),
+                    Err(e) => json_resp(500, json!({ "error": e.to_string() })),
+                }
             }
-            (Method::Get, "/api/v1/dag") => match AgentGitEngine::open(&repo_path)
-                .and_then(|e| e.dag_snapshot())
-            {
-                Ok(dag) => json_resp(200, serde_json::to_value(dag).unwrap_or_default()),
-                Err(e) => json_resp(500, json!({ "error": e.to_string() })),
-            },
             (Method::Get, "/api/v1/diff") => {
                 let node_id = extract_query_param(query, "node_id").unwrap_or_default();
                 match AgentGitEngine::open(&repo_path).and_then(|e| e.diff_node(&node_id, None)) {
@@ -46,7 +47,10 @@ pub fn run_sidecar_server(repo_path: PathBuf, port: u16) -> anyhow::Result<()> {
             }
             (Method::Post, "/api/v1/rollback") => {
                 if !verify_token(&req, &session_token) {
-                    json_resp(403, json!({ "error": "Invalid or missing X-AgentGit-Token" }))
+                    json_resp(
+                        403,
+                        json!({ "error": "Invalid or missing X-AgentGit-Token" }),
+                    )
                 } else {
                     let body = read_json_body(&mut req);
                     let node_id = body
@@ -63,7 +67,10 @@ pub fn run_sidecar_server(repo_path: PathBuf, port: u16) -> anyhow::Result<()> {
             }
             (Method::Post, "/api/v1/promote") => {
                 if !verify_token(&req, &session_token) {
-                    json_resp(403, json!({ "error": "Invalid or missing X-AgentGit-Token" }))
+                    json_resp(
+                        403,
+                        json!({ "error": "Invalid or missing X-AgentGit-Token" }),
+                    )
                 } else {
                     let body = read_json_body(&mut req);
                     let agent_id = body
@@ -81,7 +88,10 @@ pub fn run_sidecar_server(repo_path: PathBuf, port: u16) -> anyhow::Result<()> {
             }
             (Method::Post, "/api/v1/purge") => {
                 if !verify_token(&req, &session_token) {
-                    json_resp(403, json!({ "error": "Invalid or missing X-AgentGit-Token" }))
+                    json_resp(
+                        403,
+                        json!({ "error": "Invalid or missing X-AgentGit-Token" }),
+                    )
                 } else {
                     match AgentGitEngine::open(&repo_path).and_then(|e| e.purge_all()) {
                         Ok(_) => json_resp(
@@ -102,9 +112,9 @@ pub fn run_sidecar_server(repo_path: PathBuf, port: u16) -> anyhow::Result<()> {
 }
 
 fn verify_token(req: &tiny_http::Request, expected: &str) -> bool {
-    req.headers().iter().any(|h| {
-        h.field.equiv("X-AgentGit-Token") && h.value.as_str() == expected
-    })
+    req.headers()
+        .iter()
+        .any(|h| h.field.equiv("X-AgentGit-Token") && h.value.as_str() == expected)
 }
 
 fn read_json_body(req: &mut tiny_http::Request) -> Value {

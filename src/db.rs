@@ -310,7 +310,8 @@ impl StateDb {
                 created_at: r.get(7)?,
             })
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub fn update_agent_status(&self, agent_id: &str, status: &str) -> Result<()> {
@@ -430,7 +431,9 @@ impl StateDb {
                 params![session_id, safe_q, agent_filter, limit as i64],
                 map_causal_node,
             )?;
-            return rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into);
+            return rows
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(Into::into);
         }
 
         let mut stmt = self.conn.prepare(
@@ -442,8 +445,12 @@ impl StateDb {
              ORDER BY created_at DESC
              LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![session_id, agent_filter, limit as i64], map_causal_node)?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        let rows = stmt.query_map(
+            params![session_id, agent_filter, limit as i64],
+            map_causal_node,
+        )?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     /// Returns the target node ID and all causal descendant node IDs using a recursive CTE.
@@ -458,7 +465,8 @@ impl StateDb {
             SELECT id FROM subtree",
         )?;
         let rows = stmt.query_map(params![root_node_id], |r| r.get::<_, String>(0))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     /// Marks the target node and all its causal descendants as rolled back.
@@ -475,7 +483,11 @@ impl StateDb {
     }
 
     pub fn insert_gate_run(&mut self, gate: &GateRunRecord) -> Result<()> {
-        let status = if gate.exit_code == 0 { "passed" } else { "failed" };
+        let status = if gate.exit_code == 0 {
+            "passed"
+        } else {
+            "failed"
+        };
         let tx = self.conn.transaction()?;
         tx.execute(
             "INSERT INTO gate_runs (id, node_id, command, exit_code, duration_ms, output_excerpt, created_at)
